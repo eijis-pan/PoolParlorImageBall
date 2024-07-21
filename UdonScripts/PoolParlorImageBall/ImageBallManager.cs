@@ -1,12 +1,16 @@
+//#define TKCH_DEBUG_IMAGE_BALLS
+
 using System;
 using UdonSharp;
 using UnityEngine;
 using UnityEngine.UI;
 using VRC.SDKBase;
 
+[UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
 public class ImageBallManager : UdonSharpBehaviour
 {
     [SerializeField] public GameObject[] imageBalls;
+    [SerializeField] public GameObject imageBallInMirrorParent;
     private GameObject[] targetGuideline;
     private GameObject[] followGuideline;
 
@@ -21,13 +25,95 @@ public class ImageBallManager : UdonSharpBehaviour
     
     private int[] targetIndex;
     
+    //[UdonSynced] [NonSerialized] public bool enabledSynced;
     [UdonSynced] [NonSerialized] public Vector3[] ballsPSynced;
     [UdonSynced] [NonSerialized] public int[] targetIndexSynced;
     [UdonSynced] [NonSerialized] public Vector2[] targetGuideSynced;
     [UdonSynced] [NonSerialized] public Vector2[] followGuideSynced;
-    
+
+    private const int TABLE_MIRROR_UNIT = 5;
+    private const float TABLE_LONG_OFFSET = 2.064f - k_BALL_RADIUS; // 2.063f 僅かに行き過ぎ // 2.065f 僅かに足りない // 2.07f ちょっと足りない // 2.06f ちょっと行き過ぎ
+    private const float TABLE_SHORT_OFFSET = 1.15f - k_BALL_RADIUS;
+    private GameObject[] imageBallInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
+    private GameObject[] followGuidelineInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
+    private GameObject[] targetBallInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
+    private GameObject[] targetGuidelineInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
+    //private Vector3[] ballsPSyncedInMirror;
+    private GameObject[][] imageBallInMirrorMatrix = new GameObject[TABLE_MIRROR_UNIT][]{
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT]
+    };
+    private GameObject[][] followGuidelineInMirrorMatrix = new GameObject[TABLE_MIRROR_UNIT][]{
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT]
+    };
+    private GameObject[][] targetBallInMirrorMatrix = new GameObject[TABLE_MIRROR_UNIT][]{
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT]
+    };
+    private GameObject[][] targetGuidelineInMirrorMatrix = new GameObject[TABLE_MIRROR_UNIT][]{
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT],
+        new GameObject[TABLE_MIRROR_UNIT]
+    };
+    private Vector3[][] mirrorTableCenterPositions = new Vector3[TABLE_MIRROR_UNIT][]{
+        new Vector3[TABLE_MIRROR_UNIT],
+        new Vector3[TABLE_MIRROR_UNIT],
+        new Vector3[TABLE_MIRROR_UNIT],
+        new Vector3[TABLE_MIRROR_UNIT],
+        new Vector3[TABLE_MIRROR_UNIT]
+    };
+    float[][] mirrordPatternsX =
+    {
+        new float[2],
+        new float[2]
+    };
+    float[][] mirrordPatternsZ =
+    {
+        new float[2],
+        new float[2]
+    };
+    int[][] mirrordAngleFlips =
+    {
+        new int[2],
+        new int[2]
+    };
+    float[][] mirrordAngleAdjusts =
+    {
+        new float[2],
+        new float[2]
+    };
+ 
     public override void OnDeserialization()
     {
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log("TKCH ImageBallManager::OnDeserialization() start");
+#endif
+        
+        /*
+        if (!enabledSynced)
+        {
+            this.gameObject.SetActive(false);
+#if TKCH_DEBUG_IMAGE_BALLS
+            table._Log("TKCH ImageBallManager::OnDeserialization() return");
+#endif
+            return;
+        }
+
+        this.gameObject.SetActive(true);
+        */
+        
         for (int i = 0; i < imageBalls.Length; i++)
         {
             if (i < ballsPSynced.Length)
@@ -79,6 +165,10 @@ public class ImageBallManager : UdonSharpBehaviour
                 guide.transform.position = imageBalls[i].transform.position;
             }
         }
+        
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log("TKCH ImageBallManager::OnDeserialization() end");
+#endif
     }
 
     public override void OnPlayerJoined(VRCPlayerApi player)
@@ -103,9 +193,26 @@ public class ImageBallManager : UdonSharpBehaviour
             RequestSerialization();
         }
     }
-    
+
+    /*
+    private void OnDisable()
+    {
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log("TKCH ImageBallManager::OnDisable()");
+#endif
+        
+        enabledSynced = false;
+        RequestSerialization();
+    }
+    */
+
     private void OnEnable()
     {
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log("TKCH ImageBallManager::OnEnable()");
+#endif
+        
+        //enabledSynced = true;
         ballsPSynced = new Vector3[imageBalls.Length];
         targetGuideline = new GameObject[imageBalls.Length];
         followGuideline = new GameObject[imageBalls.Length];
@@ -133,6 +240,13 @@ public class ImageBallManager : UdonSharpBehaviour
             followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
         }
 
+        initializeMirrorTable();
+        for (int i = 0; i < imageBallInMirror.Length; i++)
+        {
+            imageBallInMirror[i].SetActive(true);
+        }
+        imageBallInMirror[(imageBallInMirror.Length / 2)].SetActive(false); // dup orig
+        
         _Init();
     }
 
@@ -147,6 +261,8 @@ public class ImageBallManager : UdonSharpBehaviour
     {
         repositionCount = 0;
         Array.Clear(repositioning, 0, repositioning.Length);
+
+        inMirrorPositionUpdate();
     }
     
     private void Update()
@@ -276,8 +392,8 @@ public class ImageBallManager : UdonSharpBehaviour
                             }
                         }
                         float ratio = gt2cgDiff2 / 90;
-                        followScale = 0.04f * (ratio);
-                        targetScale = 0.04f * (1 - ratio);
+                        followScale = 0.12f * (ratio); // 0.04f
+                        targetScale = 0.12f * (1 - ratio);
                     }
 
                     var followLocalScale = followGuideline[i].transform.localScale;
@@ -332,6 +448,8 @@ public class ImageBallManager : UdonSharpBehaviour
                     followGuideline[i].SetActive(true);
                 }
             }
+            
+            inMirrorPositionUpdate();
         }
     }
 
@@ -388,7 +506,205 @@ public class ImageBallManager : UdonSharpBehaviour
                 followGuideSynced[i].y = guide.activeSelf ? guide.transform.localScale.x : -1;
             }
         }
+
+        inMirrorPositionUpdate();
         
         this.RequestSerialization();
+    }
+
+    private void initializeMirrorTable()
+    {
+        initializeMirrorTableCenterPositions();
+
+        //ballsPSyncedInMirror = new Vector3[imageBallInMirror.Length];
+        
+        for (int i = 0; i < imageBallInMirror.Length; i++)
+        {
+            imageBallInMirror[i] = imageBallInMirrorParent.transform.Find($"ImageBall_{i}").gameObject;
+            followGuidelineInMirror[i] = imageBallInMirror[i].transform.Find("follow_guide").gameObject;
+            targetGuidelineInMirror[i] = imageBallInMirror[i].transform.Find("target_guide").gameObject;
+            followGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            targetGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            targetBallInMirror[i] = imageBallInMirrorParent.transform.Find($"Cylinder_{i}").gameObject; // ないのでとりあえず
+        }
+
+        for (int x = 0; x < imageBallInMirrorMatrix.Length; x++)
+        {
+            for (int z = 0; z < imageBallInMirrorMatrix[x].Length; z++)
+            {
+                imageBallInMirrorMatrix[x][z] = imageBallInMirror[(x * TABLE_MIRROR_UNIT) + z];
+                followGuidelineInMirrorMatrix[x][z] = followGuidelineInMirror[(x * TABLE_MIRROR_UNIT) + z];
+                targetBallInMirrorMatrix[x][z] = targetBallInMirror[(x * TABLE_MIRROR_UNIT) + z];
+                targetGuidelineInMirrorMatrix[x][z] = targetGuidelineInMirror[(x * TABLE_MIRROR_UNIT) + z];
+            }
+        }
+    }
+    
+    private void initializeMirrorTableCenterPositions()
+    {
+        int negativeAdjustOffset = (TABLE_MIRROR_UNIT / 2); // 5 -> -2 center set to 0,0
+        for (int x = 0; x < mirrorTableCenterPositions.Length; x++)
+        {
+            int ox = x - negativeAdjustOffset;
+            for (int z = 0; z < mirrorTableCenterPositions[x].Length; z++)
+            {
+                int oz = z - negativeAdjustOffset;
+                mirrorTableCenterPositions[x][z] = new Vector3(
+                    TABLE_LONG_OFFSET * ox,
+                    0,
+                    TABLE_SHORT_OFFSET * oz
+                );
+            }
+        }
+    }
+
+    private void inMirrorPositionUpdate()
+    {
+        inMirrorPositionUpdate(imageBalls[0].transform.localPosition, imageBallInMirrorMatrix);
+        inMirrorPositionUpdateGuidelines(imageBallInMirror, followGuideline[0], followGuidelineInMirror, followGuidelineInMirrorMatrix);
+        //inMirrorUpdateGuidelines(imageBalls[0].transform.localPosition, followGuideline[0], followGuidelineInMirror, followGuidelineInMirrorMatrix);
+        bool targetEnable = 0 <= targetIndex[0];
+        if (targetEnable)
+        {
+            inMirrorPositionUpdate(
+                table.balls[targetIndex[0]].transform.localPosition, targetBallInMirrorMatrix);
+        }
+        for (int i = 0; i < targetBallInMirror.Length; i++)
+        {
+            //targetBallInMirror[i].SetActive(targetEnable);
+        }
+        targetBallInMirror[(targetBallInMirror.Length / 2)].SetActive(false); // dup orig
+        inMirrorPositionUpdateGuidelines(targetBallInMirror, targetGuideline[0], targetGuidelineInMirror, targetGuidelineInMirrorMatrix);
+        //inMirrorUpdateGuidelines((targetEnable ? table.balls[targetIndex[0]].transform.localPosition : Vector3.negativeInfinity), targetGuideline[0], targetGuidelineInMirror, targetGuidelineInMirrorMatrix);
+    }
+    
+    private void inMirrorUpdateGuidelines(
+        Vector3 localPosition, //GameObject[] ballInMirror, 
+        GameObject guideline, 
+        GameObject[] guidelineInMirror, 
+        GameObject[][] guidelineInMirrorMatrix)
+    {
+        if (Vector3.negativeInfinity == localPosition)
+        {
+            return;
+        }
+        
+        bool active = guideline.activeSelf;
+        //Vector3 position = guideline.transform.localPosition;
+        Vector3 localScale = guideline.transform.localScale;
+        Vector3 angle = guideline.transform.localEulerAngles;
+        
+        for (int x = 0; x <= 1; x++)
+        {
+            int sx = x == 0 ? 1 : -1;
+            for (int z = 0; z <= 1; z++)
+            {
+                int sz = z == 0 ? 1 : -1;
+                mirrordPatternsX[x][z] = localPosition.x * sx;
+                mirrordPatternsZ[x][z] = localPosition.z * sz;
+                mirrordAngleFlips[x][z] = sx * sz;
+                mirrordAngleAdjusts[x][z] = z == 0 ? 0 : 180;
+            }
+        }
+
+        for (int x = 0; x < guidelineInMirrorMatrix.Length; x++)
+        {
+            for (int z = 0; z < guidelineInMirrorMatrix[x].Length; z++)
+            {
+                guidelineInMirrorMatrix[x][z].SetActive(active);
+                if (active)
+                {
+                    int x2 = x % 2;
+                    int z2 = z % 2;
+                    guidelineInMirrorMatrix[x][z].transform.localPosition = new Vector3(
+                        mirrorTableCenterPositions[x][z].x + mirrordPatternsX[x2][z2],
+                        0,
+                        mirrorTableCenterPositions[x][z].z + mirrordPatternsZ[x2][z2]
+                    );
+                    guidelineInMirrorMatrix[x][z].transform.localEulerAngles = new Vector3(
+                        0,
+                        (angle.y + mirrordAngleAdjusts[x2][z2]) * mirrordAngleFlips[x2][z2],
+                        0
+                    );
+                    //guidelineInMirrorMatrix[x][z].transform.localScale = scale;
+                    guidelineInMirrorMatrix[x][z].transform.localScale = localScale;
+                }
+            }
+        }
+    }
+
+    private void inMirrorPositionUpdateGuidelines(
+        GameObject[] ballInMirror, 
+        GameObject guideline, 
+        GameObject[] guidelineInMirror, 
+        GameObject[][] guidelineInMirrorMatrix)
+    {
+        bool active = guideline.activeSelf;
+        //Vector3 position = guideline.transform.localPosition;
+        Vector3 scale = guideline.transform.localScale;
+        //scale.x *= 3;
+        Vector3 angle = guideline.transform.localEulerAngles;
+        for (int i = 0; i < guidelineInMirror.Length; i++)
+        {
+            guidelineInMirror[i].SetActive(active);
+            if (active)
+            {
+                //guidelineInMirror[i].transform.localPosition = localPosition;
+                guidelineInMirror[i].transform.position = ballInMirror[i].transform.position;
+                guidelineInMirror[i].transform.localScale = scale;
+            }
+        }
+        
+        for (int x = 0; x <= 1; x++)
+        {
+            int sx = x == 0 ? 1 : -1;
+            for (int z = 0; z <= 1; z++)
+            {
+                int sz = z == 0 ? 1 : -1;
+                mirrordAngleFlips[x][z] = sx * sz;
+                mirrordAngleAdjusts[x][z] = z == 0 ? 0 : 180;
+            }
+        }
+        for (int x = 0; x < guidelineInMirrorMatrix.Length; x++)
+        {
+            for (int z = 0; z < guidelineInMirrorMatrix[x].Length; z++)
+            {
+                int x2 = x % 2;
+                int z2 = z % 2;
+                guidelineInMirrorMatrix[x][z].transform.localEulerAngles = new Vector3(
+                    0,
+                    (angle.y + mirrordAngleAdjusts[x2][z2]) * mirrordAngleFlips[x2][z2],
+                    0
+                );
+            }
+        }
+    }
+
+    private void inMirrorPositionUpdate(Vector3 localPosition, GameObject[][] inMirrorMatrix)
+    {
+        for (int x = 0; x <= 1; x++)
+        {
+            int sx = x == 0 ? 1 : -1;
+            for (int z = 0; z <= 1; z++)
+            {
+                int sz = z == 0 ? 1 : -1;
+                mirrordPatternsX[x][z] = localPosition.x * sx;
+                mirrordPatternsZ[x][z] = localPosition.z * sz;
+            }
+        }
+        
+        for (int x = 0; x < mirrorTableCenterPositions.Length; x++)
+        {
+            for (int z = 0; z < mirrorTableCenterPositions[x].Length; z++)
+            {
+                int x2 = x % 2;
+                int z2 = z % 2;
+                inMirrorMatrix[x][z].transform.localPosition = new Vector3(
+                    mirrorTableCenterPositions[x][z].x + mirrordPatternsX[x2][z2],
+                   0,
+                    mirrorTableCenterPositions[x][z].z + mirrordPatternsZ[x2][z2]
+                );
+            }
+        }
     }
 }
