@@ -114,6 +114,7 @@ public class ImageBallManager : UdonSharpBehaviour
         this.gameObject.SetActive(true);
         */
         
+        Array.Copy(targetIndexSynced, targetIndex, targetGuideSynced.Length);
         for (int i = 0; i < imageBalls.Length; i++)
         {
             if (i < ballsPSynced.Length)
@@ -166,6 +167,8 @@ public class ImageBallManager : UdonSharpBehaviour
             }
         }
         
+        inMirrorPositionUpdate();
+        
 #if TKCH_DEBUG_IMAGE_BALLS
         table._Log("TKCH ImageBallManager::OnDeserialization() end");
 #endif
@@ -190,6 +193,7 @@ public class ImageBallManager : UdonSharpBehaviour
         
         if (Networking.LocalPlayer.isMaster)
         {
+            syncValueUpdate();
             RequestSerialization();
         }
     }
@@ -240,12 +244,15 @@ public class ImageBallManager : UdonSharpBehaviour
             followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
         }
 
-        initializeMirrorTable();
-        for (int i = 0; i < imageBallInMirror.Length; i++)
+        if (!ReferenceEquals(null, imageBallInMirrorParent))
         {
-            imageBallInMirror[i].SetActive(true);
+            initializeMirrorTable();
+            for (int i = 0; i < imageBallInMirror.Length; i++)
+            {
+                imageBallInMirror[i].SetActive(true);
+            }
+            imageBallInMirror[(imageBallInMirror.Length / 2)].SetActive(false); // dup orig
         }
-        imageBallInMirror[(imageBallInMirror.Length / 2)].SetActive(false); // dup orig
         
         _Init();
     }
@@ -392,8 +399,8 @@ public class ImageBallManager : UdonSharpBehaviour
                             }
                         }
                         float ratio = gt2cgDiff2 / 90;
-                        followScale = 0.12f * (ratio); // 0.04f
-                        targetScale = 0.12f * (1 - ratio);
+                        followScale = 0.04f * (ratio); // carom 0.2f bank 0.12f, normal 0.04f
+                        targetScale = 0.04f * (1 - ratio);
                     }
 
                     var followLocalScale = followGuideline[i].transform.localScale;
@@ -479,7 +486,14 @@ public class ImageBallManager : UdonSharpBehaviour
         repositionCount--;
 
         grip._Reset();
+
+        syncValueUpdate();
         
+        this.RequestSerialization();
+    }
+
+    public void syncValueUpdate()
+    {
         for (int i = 0; i < imageBalls.Length; i++)
         {
             if (i < ballsPSynced.Length)
@@ -508,8 +522,6 @@ public class ImageBallManager : UdonSharpBehaviour
         }
 
         inMirrorPositionUpdate();
-        
-        this.RequestSerialization();
     }
 
     private void initializeMirrorTable()
@@ -560,6 +572,11 @@ public class ImageBallManager : UdonSharpBehaviour
 
     private void inMirrorPositionUpdate()
     {
+        if (ReferenceEquals(null, imageBallInMirrorParent))
+        {
+            return;
+        }
+
         inMirrorPositionUpdate(imageBalls[0].transform.localPosition, imageBallInMirrorMatrix);
         inMirrorPositionUpdateGuidelines(imageBallInMirror, followGuideline[0], followGuidelineInMirror, followGuidelineInMirrorMatrix);
         //inMirrorUpdateGuidelines(imageBalls[0].transform.localPosition, followGuideline[0], followGuidelineInMirror, followGuidelineInMirrorMatrix);
