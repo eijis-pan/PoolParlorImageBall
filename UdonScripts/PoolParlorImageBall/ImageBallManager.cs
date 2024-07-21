@@ -13,8 +13,11 @@ public class ImageBallManager : UdonSharpBehaviour
     [SerializeField] public GameObject imageBallInMirrorParent;
     private GameObject[] targetGuideline;
     private GameObject[] followGuideline;
+    private Material[] targetGuideDisplay;
+    private Material[] followGuideDisplay;
 
-    private const float k_BALL_RADIUS = 0.03f;
+    private const float ballMeshDiameter = 0.06f;//the ball's size as modeled in the mesh file
+    private float k_BALL_RADIUS = 0.03f;
     
     [Space(10)]
     [Header("reference of billiards module")]
@@ -32,8 +35,8 @@ public class ImageBallManager : UdonSharpBehaviour
     [UdonSynced] [NonSerialized] public Vector2[] followGuideSynced;
 
     private const int TABLE_MIRROR_UNIT = 5;
-    private const float TABLE_LONG_OFFSET = 2.064f - k_BALL_RADIUS; // 2.063f 僅かに行き過ぎ // 2.065f 僅かに足りない // 2.07f ちょっと足りない // 2.06f ちょっと行き過ぎ
-    private const float TABLE_SHORT_OFFSET = 1.15f - k_BALL_RADIUS;
+    private const float TABLE_LONG_OFFSET = 2.064f; // - k_BALL_RADIUS; // 2.063f 僅かに行き過ぎ // 2.065f 僅かに足りない // 2.07f ちょっと足りない // 2.06f ちょっと行き過ぎ
+    private const float TABLE_SHORT_OFFSET = 1.15f; // - k_BALL_RADIUS;
     private GameObject[] imageBallInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
     private GameObject[] followGuidelineInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
     private GameObject[] targetBallInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
@@ -215,11 +218,17 @@ public class ImageBallManager : UdonSharpBehaviour
 #if TKCH_DEBUG_IMAGE_BALLS
         table._Log("TKCH ImageBallManager::OnEnable()");
 #endif
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log($"  table.transform.eulerAngles.y = {table.transform.eulerAngles.y}");
+        table._Log($"  table.transform.localEulerAngles.y = {table.transform.localEulerAngles.y}");
+#endif
         
         //enabledSynced = true;
         ballsPSynced = new Vector3[imageBalls.Length];
         targetGuideline = new GameObject[imageBalls.Length];
         followGuideline = new GameObject[imageBalls.Length];
+        targetGuideDisplay = new Material[imageBalls.Length];
+        followGuideDisplay = new Material[imageBalls.Length];
         targetIndex = new int[targetGuideline.Length];
         for (int i = 0; i < targetGuideline.Length; i++)
         {
@@ -234,14 +243,19 @@ public class ImageBallManager : UdonSharpBehaviour
             imageBalls[i].GetComponentInChildren<ImageBallRepositioner>(true)._Init(this, i);
             targetGuideline[i] = imageBalls[i].transform.Find("target_guide").gameObject;
             followGuideline[i] = imageBalls[i].transform.Find("follow_guide").gameObject;
+            // imageBalls[i].transform.localEulerAngles = Vector3.zero;
         }
         for (int i = 0; i < targetGuideline.Length; i++)
         {
-            targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            // targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            targetGuideDisplay[i] = targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material;
+            targetGuideDisplay[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
         }
         for (int i = 0; i < followGuideline.Length; i++)
         {
-            followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            // followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            followGuideDisplay[i] = followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material;
+            followGuideDisplay[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
         }
 
         if (!ReferenceEquals(null, imageBallInMirrorParent))
@@ -280,10 +294,37 @@ public class ImageBallManager : UdonSharpBehaviour
     public void _Tick()
     {
         if (repositionCount == 0) return;
+        
+        Vector3 k_vE = (Vector3)table.GetProgramVariable("k_vE");
+        Vector3 k_vF = (Vector3)table.GetProgramVariable("k_vF");
+        for (int i = 0; i < targetGuideline.Length; i++)
+        {
+            targetGuideDisplay[i].SetVector("_Dims", new Vector4(k_vE.x, k_vE.z, 0, 0));
+        }
+        for (int i = 0; i < followGuideline.Length; i++)
+        {
+            followGuideDisplay[i].SetVector("_Dims", new Vector4(k_vE.x, k_vE.z, 0, 0));
+        }
 
+        float k_BALL_DIAMETRE = (float)table.currentPhysicsManager.GetProgramVariable("k_BALL_DIAMETRE");
+        float newscale = k_BALL_DIAMETRE / ballMeshDiameter;
+        Vector3 newBallSize = Vector3.one * newscale;
+        for (int i = 0; i < imageBalls.Length; i++)
+        {
+            imageBalls[i].transform.localScale = newBallSize;
+        }
+        
+        k_BALL_RADIUS = (float)table.currentPhysicsManager.GetProgramVariable("k_BALL_RADIUS");
         Vector3 k_pR = (Vector3)table.currentPhysicsManager.GetProgramVariable("k_pR");
         Vector3 k_pO = (Vector3)table.currentPhysicsManager.GetProgramVariable("k_pO");
         Transform transformSurface = (Transform)table.currentPhysicsManager.GetProgramVariable("transform_Surface");
+        if (ReferenceEquals(null, transformSurface))
+        {
+            transformSurface = (Transform)table.currentPhysicsManager.GetProgramVariable("table_Surface");
+        }
+        float maxX = k_pR.x - k_BALL_RADIUS;
+        float maxZ = k_pO.z - k_BALL_RADIUS;
+
         for (int i = 0; i < repositioning.Length; i++)
         {
             if (!repositioning[i]) continue;
@@ -292,11 +333,9 @@ public class ImageBallManager : UdonSharpBehaviour
            
             Transform pickupTransform = imageBall.transform.GetChild(0);
             
-            float maxX = k_pR.x;
-
             Vector3 boundedLocation = table.transform.InverseTransformPoint(pickupTransform.position);
-            boundedLocation.x = Mathf.Clamp(boundedLocation.x, -k_pR.x, maxX);
-            boundedLocation.z = Mathf.Clamp(boundedLocation.z, -k_pO.z, k_pO.z);
+            boundedLocation.x = Mathf.Clamp(boundedLocation.x, -maxX, maxX);
+            boundedLocation.z = Mathf.Clamp(boundedLocation.z, -maxZ, maxZ);
             boundedLocation.y = 0.0f;
             
             // ensure no collisions
@@ -343,7 +382,7 @@ public class ImageBallManager : UdonSharpBehaviour
                 }
             }
 
-            float targetGuidelineAdjust = 180; //90;
+            float targetGuidelineAdjust = 0; // 90 + transform.localEulerAngles.y + table.transform.localEulerAngles.y;
             
             if (targetIndex[i] != collidedBall)
             {
@@ -362,16 +401,22 @@ public class ImageBallManager : UdonSharpBehaviour
                     float c2gDeg = c2gRad * Mathf.Rad2Deg;
                     
                     targetGuideline[i].transform.position = table.balls[collidedBall].transform.position;
-                    targetGuideline[i].transform.localEulerAngles = new Vector3(0.0f, g2tDeg + targetGuidelineAdjust, 0.0f);
+                    // targetGuideline[i].transform.localEulerAngles = new Vector3(0.0f, g2tDeg + targetGuidelineAdjust, 0.0f);
+                    targetGuideline[i].transform.eulerAngles = new Vector3(0.0f, g2tDeg + targetGuidelineAdjust, 0.0f);
+#if TKCH_DEBUG_IMAGE_BALLS
+                    table._Log($"  targetGuideline[{i}].transform.eulerAngles.y = {targetGuideline[i].transform.eulerAngles.y}");
+                    table._Log($"  targetGuideline[{i}].transform.localEulerAngles.y = {targetGuideline[i].transform.localEulerAngles.y}");
+#endif
                     
                     float ct2gtDiff = g2tDeg - c2tDeg;
-                    
-                    float followGuidelineAdjust2 = 90; //180;
+
+                    float followGuidelineAdjust2 = targetGuidelineAdjust - 90;
                     if ((-180 <= ct2gtDiff && ct2gtDiff < 0) || 180 <= ct2gtDiff)
                     {
-                        followGuidelineAdjust2 = 270; //0;
+                        followGuidelineAdjust2 += 180;
                     }
-                    followGuideline[i].transform.localEulerAngles = new Vector3(0.0f, g2tDeg + followGuidelineAdjust2, 0.0f);
+                    // followGuideline[i].transform.localEulerAngles = new Vector3(0.0f, g2tDeg + followGuidelineAdjust2, 0.0f);
+                    followGuideline[i].transform.eulerAngles = new Vector3(0.0f, g2tDeg + followGuidelineAdjust2, 0.0f);
                     
                     float followScale = 0.06f;
                     float targetScale = 0.06f;
@@ -418,7 +463,7 @@ public class ImageBallManager : UdonSharpBehaviour
             {
                 // no collisions, we can update the position and reset the pickup
                 var pos = table.transform.TransformPoint(boundedLocation);
-                pos.y = 0.8606015f;;
+                pos.y = pos.y + 0.8606015f;
 
                 imageBalls[i].transform.position = pos;
 
@@ -537,7 +582,7 @@ public class ImageBallManager : UdonSharpBehaviour
             targetGuidelineInMirror[i] = imageBallInMirror[i].transform.Find("target_guide").gameObject;
             followGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
             targetGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
-            targetBallInMirror[i] = imageBallInMirrorParent.transform.Find($"Cylinder_{i}").gameObject; // ないのでとりあえず
+            // targetBallInMirror[i] = imageBallInMirrorParent.transform.Find($"Cylinder_{i}").gameObject; // ないのでとりあえず
         }
 
         for (int x = 0; x < imageBallInMirrorMatrix.Length; x++)
@@ -562,9 +607,9 @@ public class ImageBallManager : UdonSharpBehaviour
             {
                 int oz = z - negativeAdjustOffset;
                 mirrorTableCenterPositions[x][z] = new Vector3(
-                    TABLE_LONG_OFFSET * ox,
+                    (TABLE_LONG_OFFSET - k_BALL_RADIUS) * ox,
                     0,
-                    TABLE_SHORT_OFFSET * oz
+                    (TABLE_SHORT_OFFSET - k_BALL_RADIUS) * oz
                 );
             }
         }
