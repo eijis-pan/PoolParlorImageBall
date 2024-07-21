@@ -13,12 +13,18 @@ public class ImageBallManager : UdonSharpBehaviour
     [SerializeField] public GameObject imageBallInMirrorParent;
     private GameObject[] targetGuideline;
     private GameObject[] followGuideline;
-    private Material[] targetGuideDisplay;
-    private Material[] followGuideDisplay;
+    private Material[] targetGuideDisplayMaterial;
+    private Material[] followGuideDisplayMaterial;
 
     private const float ballMeshDiameter = 0.06f;//the ball's size as modeled in the mesh file
     private float k_BALL_RADIUS = 0.03f;
-    
+    private float maxX;
+    private float maxZ;
+    private Transform transformSurface;
+    // private readonly int _Floor = Shader.PropertyToID("_Floor");    
+    // private readonly int _Dims = Shader.PropertyToID("_Dims");
+    private Vector4 guideMaterialDimsVector;
+
     [Space(10)]
     [Header("reference of billiards module")]
     [SerializeField] public BilliardsModule table;
@@ -227,8 +233,8 @@ public class ImageBallManager : UdonSharpBehaviour
         ballsPSynced = new Vector3[imageBalls.Length];
         targetGuideline = new GameObject[imageBalls.Length];
         followGuideline = new GameObject[imageBalls.Length];
-        targetGuideDisplay = new Material[imageBalls.Length];
-        followGuideDisplay = new Material[imageBalls.Length];
+        targetGuideDisplayMaterial = new Material[imageBalls.Length];
+        followGuideDisplayMaterial = new Material[imageBalls.Length];
         targetIndex = new int[targetGuideline.Length];
         for (int i = 0; i < targetGuideline.Length; i++)
         {
@@ -245,17 +251,18 @@ public class ImageBallManager : UdonSharpBehaviour
             followGuideline[i] = imageBalls[i].transform.Find("follow_guide").gameObject;
             // imageBalls[i].transform.localEulerAngles = Vector3.zero;
         }
+
         for (int i = 0; i < targetGuideline.Length; i++)
         {
             // targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
-            targetGuideDisplay[i] = targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material;
-            targetGuideDisplay[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            targetGuideDisplayMaterial[i] =targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().sharedMaterial;
+            targetGuideDisplayMaterial[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
         }
         for (int i = 0; i < followGuideline.Length; i++)
         {
             // followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
-            followGuideDisplay[i] = followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material;
-            followGuideDisplay[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            followGuideDisplayMaterial[i] = followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().sharedMaterial;
+            followGuideDisplayMaterial[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
         }
 
         if (!ReferenceEquals(null, imageBallInMirrorParent))
@@ -269,23 +276,126 @@ public class ImageBallManager : UdonSharpBehaviour
         }
         
         _Init();
+        SendCustomEventDelayedSeconds(nameof(_DelayInit), 1.0f);
     }
 
     public void _Init()
     {
         repositioning = new bool[table.balls.Length];
-
-        _OnGameStarted();
-    }
-    
-    public void _OnGameStarted()
-    {
+        
         repositionCount = 0;
         Array.Clear(repositioning, 0, repositioning.Length);
 
         inMirrorPositionUpdate();
+        
+#if TKCH_DEBUG_IMAGE_BALLS
+        table.SetProgramVariable("callbacks", this);
+#endif
     }
+
+    public void _DelayInit()
+    {
+        TableParamUpdate();
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log($"  transformSurface.position.y = {transformSurface.position.y}");
+#endif
+        for (int i = 0; i < imageBalls.Length; i++)
+        {
+            MeshRenderer meshRenderer = imageBalls[i].GetComponent<MeshRenderer>();
+            MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
+            // materialPropertyBlock.SetFloat(_Floor, transformSurface.position.y - k_BALL_RADIUS);
+            materialPropertyBlock.SetFloat("_Floor", transformSurface.position.y - k_BALL_RADIUS);
+            meshRenderer.SetPropertyBlock(materialPropertyBlock);
+        }
+    }
+
+#if TKCH_DEBUG_IMAGE_BALLS
+    public void _OnLobbyOpened()
+    {
+        for (int i = 0; i < imageBalls.Length; i++)
+        {
+            MeshRenderer meshRenderer = imageBalls[i].GetComponent<MeshRenderer>();
+            Material ballShadow = meshRenderer.sharedMaterials[1];
+            table._Log($"  {ballShadow.name} _Floor = {ballShadow.GetFloat("_Floor")}");
+            // table._Log($"  {ballShadow.name} _Floor = {ballShadow.GetFloat(_Floor)}");
+            // ballShadow = meshRenderer.materials[1];
+            // table._Log($"  {ballShadow.name} _Floor = {ballShadow.GetFloat(_Floor)}");
+            //
+            // Material ballMarker = meshRenderer.sharedMaterial;
+            // table._Log($"  {ballMarker.name} _FresnelPower = {ballMarker.GetFloat(_FresnelPower)}");
+            // ballMarker = meshRenderer.material;
+            // table._Log($"  {ballMarker.name} _FresnelPower = {ballMarker.GetFloat(_FresnelPower)}");
+            
+            table._Log($"  meshRenderer.HasPropertyBlock() = {meshRenderer.HasPropertyBlock()}");
+            // table._Log($"  followGuideDisplay[{i}].HasPropertyBlock() = {followGuideDisplay[i].HasPropertyBlock()}");
+            // table._Log($"  targetGuideDisplay[{i}].HasPropertyBlock() = {targetGuideDisplay[i].HasPropertyBlock()}");
+        }
+        // table._Log($"  guideMaterialPropertyBlock _Dims.x = {guideMaterialPropertyBlock.GetVector(_Dims).x}");
+        table._Log($"  _Dims = {guideMaterialDimsVector.x}, {guideMaterialDimsVector.y}");
+        // table._Log($"  guideDisplayMaterial _Dims = {guideDisplayMaterial.GetVector(_Dims).x}, {guideDisplayMaterial.GetVector(_Dims).y}");
+    }
+#endif
     
+/*
+    public void _OnLobbyClosed()
+    {
+    }
+
+    public void _OnGameStarted()
+    {
+       // repositionCount = 0;
+       // Array.Clear(repositioning, 0, repositioning.Length);
+       //
+       // inMirrorPositionUpdate();
+    }
+*/
+
+    public void TableParamUpdate()
+    {
+        UdonSharpBehaviour physicsManager = table.currentPhysicsManager;
+        Vector3 k_pR = (Vector3)physicsManager.GetProgramVariable("k_pR");
+        Vector3 k_pO = (Vector3)physicsManager.GetProgramVariable("k_pO");
+        maxX = k_pR.x;
+        maxZ = k_pO.z;
+
+        transformSurface = (Transform)physicsManager.GetProgramVariable("transform_Surface");
+        if (ReferenceEquals(null, transformSurface))
+        {
+            transformSurface = (Transform)physicsManager.GetProgramVariable("table_Surface");
+
+            k_BALL_RADIUS = (float)physicsManager.GetProgramVariable("k_BALL_RADIUS");
+            maxX = k_pR.x - k_BALL_RADIUS;
+            maxZ = k_pO.z - k_BALL_RADIUS;
+
+            Vector3 k_vE = (Vector3)table.GetProgramVariable("k_vE");
+            guideMaterialDimsVector = new Vector4(k_vE.x, k_vE.z, 0, 0);
+            for (int i = 0; i < targetGuideline.Length; i++)
+            {
+                targetGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
+                // targetGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
+            }
+            for (int i = 0; i < followGuideline.Length; i++)
+            {
+                followGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
+                // followGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
+            }
+
+            float k_BALL_DIAMETRE = (float)physicsManager.GetProgramVariable("k_BALL_DIAMETRE");
+            float newscale = k_BALL_DIAMETRE / ballMeshDiameter;
+            Vector3 newBallSize = Vector3.one * newscale;
+            for (int i = 0; i < imageBalls.Length; i++)
+            {
+                imageBalls[i].transform.localScale = newBallSize;
+                
+                Transform imageBallMarker = imageBalls[i].transform.Find("image_ball_marker");
+                imageBallMarker.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+                imageBallMarker.localPosition = new Vector3(0, 0.0329f, 0);
+            }
+            
+            SendCustomEventDelayedSeconds(nameof(TableParamUpdate), 3.0f);
+        }
+    }
+
     private void Update()
     {
         this._Tick();
@@ -294,37 +404,9 @@ public class ImageBallManager : UdonSharpBehaviour
     public void _Tick()
     {
         if (repositionCount == 0) return;
-        
-        Vector3 k_vE = (Vector3)table.GetProgramVariable("k_vE");
-        Vector3 k_vF = (Vector3)table.GetProgramVariable("k_vF");
-        for (int i = 0; i < targetGuideline.Length; i++)
-        {
-            targetGuideDisplay[i].SetVector("_Dims", new Vector4(k_vE.x, k_vE.z, 0, 0));
-        }
-        for (int i = 0; i < followGuideline.Length; i++)
-        {
-            followGuideDisplay[i].SetVector("_Dims", new Vector4(k_vE.x, k_vE.z, 0, 0));
-        }
 
-        float k_BALL_DIAMETRE = (float)table.currentPhysicsManager.GetProgramVariable("k_BALL_DIAMETRE");
-        float newscale = k_BALL_DIAMETRE / ballMeshDiameter;
-        Vector3 newBallSize = Vector3.one * newscale;
-        for (int i = 0; i < imageBalls.Length; i++)
-        {
-            imageBalls[i].transform.localScale = newBallSize;
-        }
+        // TableParamUpdate();
         
-        k_BALL_RADIUS = (float)table.currentPhysicsManager.GetProgramVariable("k_BALL_RADIUS");
-        Vector3 k_pR = (Vector3)table.currentPhysicsManager.GetProgramVariable("k_pR");
-        Vector3 k_pO = (Vector3)table.currentPhysicsManager.GetProgramVariable("k_pO");
-        Transform transformSurface = (Transform)table.currentPhysicsManager.GetProgramVariable("transform_Surface");
-        if (ReferenceEquals(null, transformSurface))
-        {
-            transformSurface = (Transform)table.currentPhysicsManager.GetProgramVariable("table_Surface");
-        }
-        float maxX = k_pR.x - k_BALL_RADIUS;
-        float maxZ = k_pO.z - k_BALL_RADIUS;
-
         for (int i = 0; i < repositioning.Length; i++)
         {
             if (!repositioning[i]) continue;
@@ -463,7 +545,7 @@ public class ImageBallManager : UdonSharpBehaviour
             {
                 // no collisions, we can update the position and reset the pickup
                 var pos = table.transform.TransformPoint(boundedLocation);
-                pos.y = pos.y + 0.8606015f;
+                pos.y = pos.y + transformSurface.localPosition.y; // 0.8606015f;
 
                 imageBalls[i].transform.position = pos;
 
