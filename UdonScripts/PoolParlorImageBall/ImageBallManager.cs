@@ -28,6 +28,7 @@ public class ImageBallManager : UdonSharpBehaviour
     [Space(10)]
     [Header("reference of billiards module")]
     [SerializeField] public BilliardsModule table;
+    [SerializeField] public float tableParamPollingInterval = 3.0f;
     
     private int repositionCount;
     private bool[] repositioning;
@@ -255,13 +256,13 @@ public class ImageBallManager : UdonSharpBehaviour
         for (int i = 0; i < targetGuideline.Length; i++)
         {
             // targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
-            targetGuideDisplayMaterial[i] =targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().sharedMaterial;
+            targetGuideDisplayMaterial[i] =targetGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material;
             targetGuideDisplayMaterial[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
         }
         for (int i = 0; i < followGuideline.Length; i++)
         {
             // followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
-            followGuideDisplayMaterial[i] = followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().sharedMaterial;
+            followGuideDisplayMaterial[i] = followGuideline[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material;
             followGuideDisplayMaterial[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
         }
 
@@ -358,6 +359,19 @@ public class ImageBallManager : UdonSharpBehaviour
         maxX = k_pR.x;
         maxZ = k_pO.z;
 
+        Vector3 k_vE = (Vector3)table.GetProgramVariable("k_vE");
+        guideMaterialDimsVector = new Vector4(k_vE.x, k_vE.z, 0, 0);
+        for (int i = 0; i < targetGuideline.Length; i++)
+        {
+            targetGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
+            // targetGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
+        }
+        for (int i = 0; i < followGuideline.Length; i++)
+        {
+            followGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
+            // followGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
+        }
+
         transformSurface = (Transform)physicsManager.GetProgramVariable("transform_Surface");
         if (ReferenceEquals(null, transformSurface))
         {
@@ -366,19 +380,6 @@ public class ImageBallManager : UdonSharpBehaviour
             k_BALL_RADIUS = (float)physicsManager.GetProgramVariable("k_BALL_RADIUS");
             maxX = k_pR.x - k_BALL_RADIUS;
             maxZ = k_pO.z - k_BALL_RADIUS;
-
-            Vector3 k_vE = (Vector3)table.GetProgramVariable("k_vE");
-            guideMaterialDimsVector = new Vector4(k_vE.x, k_vE.z, 0, 0);
-            for (int i = 0; i < targetGuideline.Length; i++)
-            {
-                targetGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
-                // targetGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
-            }
-            for (int i = 0; i < followGuideline.Length; i++)
-            {
-                followGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
-                // followGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
-            }
 
             float k_BALL_DIAMETRE = (float)physicsManager.GetProgramVariable("k_BALL_DIAMETRE");
             float newscale = k_BALL_DIAMETRE / ballMeshDiameter;
@@ -391,8 +392,11 @@ public class ImageBallManager : UdonSharpBehaviour
                 imageBallMarker.localScale = new Vector3(0.3f, 0.3f, 0.3f);
                 imageBallMarker.localPosition = new Vector3(0, 0.0329f, 0);
             }
-            
-            SendCustomEventDelayedSeconds(nameof(TableParamUpdate), 3.0f);
+        }
+
+        if (0 < tableParamPollingInterval)
+        {
+            SendCustomEventDelayedSeconds(nameof(TableParamUpdate), tableParamPollingInterval);
         }
     }
 
@@ -545,7 +549,7 @@ public class ImageBallManager : UdonSharpBehaviour
             {
                 // no collisions, we can update the position and reset the pickup
                 var pos = table.transform.TransformPoint(boundedLocation);
-                pos.y = pos.y + transformSurface.localPosition.y; // 0.8606015f;
+                pos.y = transformSurface.position.y; // 0.8606015f;
 
                 imageBalls[i].transform.position = pos;
 
