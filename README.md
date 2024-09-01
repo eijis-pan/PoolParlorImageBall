@@ -3,14 +3,20 @@ PoolParlorを改変したものなので、PoolParlorと同等に使用しても
 
 1. PoolParlorImageBall.unitypackage をインポートする
 2. Assets/eijis/Prefab/ImageBallManager をヒエラルキーにドロップする
-3. ヒエラルキーにドロップしたImageBallManagerのインスペクターでImage Ball Manager (U# Script)コンポーネントのTableプロパティにPool Parlor Table/BilliardsModuleを設定する
+ 　（バンク対応イメージボールの場合 ImageBallManager_bank をしようしてください）
+4. ヒエラルキーにドロップしたImageBallManagerのインスペクターでImage Ball Manager (U# Script)コンポーネントのTableプロパティにPool Parlor Table/BilliardsModuleを設定する
 
 <img width="778" alt="PoolParlorImageBall" src="https://github.com/user-attachments/assets/2823df70-e0af-4172-a263-d4c696b26807">
 
 #
 
-現在Bank対応は動作しません。（ImageBallManager_bank は使用しないで下さい。）  
-Image Ball In Mirror Parent はBank用の設定プロパティなので空（None）のままで良いです。
+通常のイメージボール（バンク対応ではない）の場合  
+Image Ball In Mirror Parent はバンク対応用の設定プロパティなので空（None）のままで良いです。
+
+※バンク対応イメージボールとは、ガイドラインがクッションで反射するようにしたもののことです
+
+制限事項
+- バンク対応イメージボールで反射したガイドラインが表示されるのは最初の1個だけです
 
 #
 
