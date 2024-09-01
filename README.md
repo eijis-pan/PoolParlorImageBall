@@ -2,8 +2,8 @@ PoolParlorを改変したものなので、PoolParlorと同等に使用しても
 #
 
 1. PoolParlorImageBall.unitypackage をインポートする
-2. Assets/eijis/Prefab/ImageBallManager をヒエラルキーにドロップする
- 　（バンク対応イメージボールの場合 ImageBallManager_bank をしようしてください）
+2. Assets/eijis/Prefab/ImageBallManager をヒエラルキーにドロップする  
+ 　（バンク対応イメージボールの場合 ImageBallManager_bank を使用してください）
 4. ヒエラルキーにドロップしたImageBallManagerのインスペクターでImage Ball Manager (U# Script)コンポーネントのTableプロパティにPool Parlor Table/BilliardsModuleを設定する
 
 <img width="778" alt="PoolParlorImageBall" src="https://github.com/user-attachments/assets/2823df70-e0af-4172-a263-d4c696b26807">
