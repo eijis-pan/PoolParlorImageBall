@@ -15,6 +15,7 @@ public class ImageBallManager : UdonSharpBehaviour
     private GameObject[] followGuideline;
     private Material[] targetGuideDisplayMaterial;
     private Material[] followGuideDisplayMaterial;
+    private float guideScaleBase = 0.04f; // carom 0.2f bank 0.12f, normal 0.04f
 
     private const float ballMeshDiameter = 0.06f;//the ball's size as modeled in the mesh file
     private float k_BALL_RADIUS = 0.03f;
@@ -42,8 +43,8 @@ public class ImageBallManager : UdonSharpBehaviour
     [UdonSynced] [NonSerialized] public Vector2[] followGuideSynced;
 
     private const int TABLE_MIRROR_UNIT = 5;
-    private const float TABLE_LONG_OFFSET = 2.064f; // - k_BALL_RADIUS; // 2.063f 僅かに行き過ぎ // 2.065f 僅かに足りない // 2.07f ちょっと足りない // 2.06f ちょっと行き過ぎ
-    private const float TABLE_SHORT_OFFSET = 1.15f; // - k_BALL_RADIUS;
+    private /* const */ float TABLE_LONG_OFFSET = 2.064f; // - k_BALL_RADIUS; // 2.063f 僅かに行き過ぎ // 2.065f 僅かに足りない // 2.07f ちょっと足りない // 2.06f ちょっと行き過ぎ
+    private /* const */ float TABLE_SHORT_OFFSET = 1.15f; // - k_BALL_RADIUS;
     private GameObject[] imageBallInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
     private GameObject[] followGuidelineInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
     private GameObject[] targetBallInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
@@ -282,6 +283,9 @@ public class ImageBallManager : UdonSharpBehaviour
 
     public void _Init()
     {
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log("TKCH ImageBallManager::_Init() start");
+#endif
         repositioning = new bool[table.balls.Length];
         
         repositionCount = 0;
@@ -353,6 +357,9 @@ public class ImageBallManager : UdonSharpBehaviour
 
     public void TableParamUpdate()
     {
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log("TKCH ImageBallManager::TableParamUpdate() start");
+#endif
         UdonSharpBehaviour physicsManager = table.currentPhysicsManager;
         Vector3 k_pR = (Vector3)physicsManager.GetProgramVariable("k_pR");
         Vector3 k_pO = (Vector3)physicsManager.GetProgramVariable("k_pO");
@@ -360,17 +367,18 @@ public class ImageBallManager : UdonSharpBehaviour
         maxZ = k_pO.z;
 
         Vector3 k_vE = (Vector3)table.GetProgramVariable("k_vE");
+#if TKCH_DEBUG_IMAGE_BALLS
+        // pp103 k_vE = (1.09, 0.00, 0.63)
+        // VRCSA_classic k_vE = (1.09, 0.00, 0.63)
+        // VRCSA_7ft     k_vE = (1.01, 0.00, 0.52)
+        // Guideline      1.23, 0.764    x = 0.14, z = 0.134
+        // Guideline_bank 1.017, 0.561   x = -0.073, z = -0.069
+        // table._Log($"TKCH  k_vE = {k_vE}");
+#endif
         guideMaterialDimsVector = new Vector4(k_vE.x, k_vE.z, 0, 0);
-        for (int i = 0; i < targetGuideline.Length; i++)
-        {
-            targetGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
-            // targetGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
-        }
-        for (int i = 0; i < followGuideline.Length; i++)
-        {
-            followGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
-            // followGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
-        }
+#if TKCH_DEBUG_IMAGE_BALLS
+        // table._Log($"TKCH  guideMaterialDimsVector = {guideMaterialDimsVector}");
+#endif
 
         transformSurface = (Transform)physicsManager.GetProgramVariable("transform_Surface");
         if (ReferenceEquals(null, transformSurface))
@@ -392,6 +400,62 @@ public class ImageBallManager : UdonSharpBehaviour
                 imageBallMarker.localScale = new Vector3(0.3f, 0.3f, 0.3f);
                 imageBallMarker.localPosition = new Vector3(0, 0.0329f, 0);
             }
+
+#if TKCH_DEBUG_IMAGE_BALLS
+            table._Log($"TKCH  k_vE = {k_vE}, k_BALL_RADIUS = {k_BALL_RADIUS}"); // 0.028575
+#endif
+
+            if (!ReferenceEquals(null, imageBallInMirrorParent))
+            {
+                TABLE_LONG_OFFSET = ((k_pR.x * 2) - k_BALL_RADIUS);
+                TABLE_SHORT_OFFSET = ((k_pO.z * 2) - k_BALL_RADIUS);
+#if TKCH_DEBUG_IMAGE_BALLS
+                table._Log($"TKCH  TABLE_LONG_OFFSET = {TABLE_LONG_OFFSET}");
+                table._Log($"TKCH  TABLE_SHORT_OFFSET = {TABLE_SHORT_OFFSET}");
+#endif
+                initializeMirrorTableCenterPositions();
+                
+#if TKCH_DEBUG_IMAGE_BALLS
+                for (int i = 0; i < imageBallInMirror.Length; i++)
+                {
+                    imageBallInMirror[i].transform.localScale = newBallSize;
+                    targetBallInMirror[i].transform.localScale = newBallSize;
+                }
+#endif
+                guideMaterialDimsVector = new Vector4(k_pR.x - k_BALL_RADIUS, k_pO.z - k_BALL_RADIUS, 0, 0);
+                
+                for (int i = 0; i < imageBallInMirror.Length; i++)
+                {
+                    followGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetVector("_Dims", guideMaterialDimsVector);
+                    targetGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetVector("_Dims", guideMaterialDimsVector);
+                }
+            }
+        }
+        else
+        {
+            if (!ReferenceEquals(null, imageBallInMirrorParent))
+            {
+                guideMaterialDimsVector = new Vector4(k_vE.x - 0.073f, k_vE.z - 0.069f, 0, 0);
+#if TKCH_DEBUG_IMAGE_BALLS
+                table._Log($"TKCH  guideMaterialDimsVector = {guideMaterialDimsVector}");
+#endif
+            }
+        }
+        
+        for (int i = 0; i < targetGuideline.Length; i++)
+        {
+            targetGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
+            // targetGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
+        }
+        for (int i = 0; i < followGuideline.Length; i++)
+        {
+            followGuideDisplayMaterial[i].SetVector("_Dims", guideMaterialDimsVector);
+            // followGuideDisplayMaterial[i].SetVector(_Dims, guideMaterialDimsVector);
+        }
+
+        if (!ReferenceEquals(null, imageBallInMirrorParent))
+        {
+            guideScaleBase = 0.12f; // carom 0.2f bank 0.12f, normal 0.04f
         }
 
         if (0 < tableParamPollingInterval)
@@ -530,8 +594,8 @@ public class ImageBallManager : UdonSharpBehaviour
                             }
                         }
                         float ratio = gt2cgDiff2 / 90;
-                        followScale = 0.04f * (ratio); // carom 0.2f bank 0.12f, normal 0.04f
-                        targetScale = 0.04f * (1 - ratio);
+                        followScale = guideScaleBase * (ratio);
+                        targetScale = guideScaleBase * (1 - ratio);
                     }
 
                     var followLocalScale = followGuideline[i].transform.localScale;
@@ -668,7 +732,7 @@ public class ImageBallManager : UdonSharpBehaviour
             targetGuidelineInMirror[i] = imageBallInMirror[i].transform.Find("target_guide").gameObject;
             followGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
             targetGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
-            // targetBallInMirror[i] = imageBallInMirrorParent.transform.Find($"Cylinder_{i}").gameObject; // ないのでとりあえず
+            targetBallInMirror[i] = imageBallInMirrorParent.transform.Find($"Cylinder_{i}").gameObject; // ないのでとりあえず
         }
 
         for (int x = 0; x < imageBallInMirrorMatrix.Length; x++)
@@ -703,6 +767,9 @@ public class ImageBallManager : UdonSharpBehaviour
 
     private void inMirrorPositionUpdate()
     {
+#if TKCH_DEBUG_IMAGE_BALLS
+        // table._Log("TKCH ImageBallManager::inMirrorPositionUpdate() start");
+#endif
         if (ReferenceEquals(null, imageBallInMirrorParent))
         {
             return;
@@ -721,6 +788,11 @@ public class ImageBallManager : UdonSharpBehaviour
         {
             //targetBallInMirror[i].SetActive(targetEnable);
         }
+#if TKCH_DEBUG_IMAGE_BALLS
+        // table._Log($"TKCH  targetBallInMirror is null ? {ReferenceEquals(null, targetBallInMirror)}");
+        // table._Log($"TKCH  targetBallInMirror.Length = {targetBallInMirror.Length}");
+        // table._Log($"TKCH  targetBallInMirror[{(targetBallInMirror.Length / 2)}] is null ? {ReferenceEquals(null, targetBallInMirror[(targetBallInMirror.Length / 2)])}");
+#endif
         targetBallInMirror[(targetBallInMirror.Length / 2)].SetActive(false); // dup orig
         inMirrorPositionUpdateGuidelines(targetBallInMirror, targetGuideline[0], targetGuidelineInMirror, targetGuidelineInMirrorMatrix);
         //inMirrorUpdateGuidelines((targetEnable ? table.balls[targetIndex[0]].transform.localPosition : Vector3.negativeInfinity), targetGuideline[0], targetGuidelineInMirror, targetGuidelineInMirrorMatrix);
