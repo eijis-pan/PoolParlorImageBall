@@ -6,7 +6,7 @@ namespace EijisPoolParlorTableUtil
 {
 	public class PoolParlorImageBallPackage
 	{
-		private static readonly string exportPackageFilePath = "PoolParlorImageBall_20240901.unityPackage";
+		private static readonly string exportPackageFilePath = "PoolParlorImageBall_20240905.unityPackage";
 		static readonly string[] exportFilePaths = 
 		{
 			"Assets/eijis/Materials/PoolParlorImageBall/ForrowGuideline.mat",
@@ -28,7 +28,7 @@ namespace EijisPoolParlorTableUtil
 			"Assets/eijis/UdonScripts/PoolParlorImageBall/ImageBallRepositioner.cs"
 		};
 		
-		[MenuItem("GameObject/TKCH/PoolParlor/ImageBallExportPackage_20240901", false, 0)]
+		[MenuItem("GameObject/TKCH/PoolParlor/ImageBallExportPackage_20240905", false, 0)]
 		private static void ExportPackage_Menu(MenuCommand command)
 		{
 			try

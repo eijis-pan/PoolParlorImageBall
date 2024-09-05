@@ -25,6 +25,7 @@ public class ImageBallManager : UdonSharpBehaviour
     // private readonly int _Floor = Shader.PropertyToID("_Floor");    
     // private readonly int _Dims = Shader.PropertyToID("_Dims");
     private Vector4 guideMaterialDimsVector;
+    private int tableModel = Int32.MinValue;
 
     [Space(10)]
     [Header("reference of billiards module")]
@@ -49,6 +50,8 @@ public class ImageBallManager : UdonSharpBehaviour
     private GameObject[] followGuidelineInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
     private GameObject[] targetBallInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
     private GameObject[] targetGuidelineInMirror = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
+    private Material[] followGuideDisplayMaterialInMirror;
+    private Material[] targetGuideDisplayMaterialInMirror;
     //private Vector3[] ballsPSyncedInMirror;
     private GameObject[][] imageBallInMirrorMatrix = new GameObject[TABLE_MIRROR_UNIT][]{
         new GameObject[TABLE_MIRROR_UNIT],
@@ -269,6 +272,13 @@ public class ImageBallManager : UdonSharpBehaviour
 
         if (!ReferenceEquals(null, imageBallInMirrorParent))
         {
+            Quaternion rotation = imageBallInMirrorParent.transform.rotation;
+            imageBallInMirrorParent.transform.eulerAngles = new Vector3(
+                rotation.eulerAngles.x,
+                table.transform.eulerAngles.y,
+                rotation.eulerAngles.z
+            );
+
             initializeMirrorTable();
             for (int i = 0; i < imageBallInMirror.Length; i++)
             {
@@ -360,6 +370,25 @@ public class ImageBallManager : UdonSharpBehaviour
 #if TKCH_DEBUG_IMAGE_BALLS
         table._Log("TKCH ImageBallManager::TableParamUpdate() start");
 #endif
+        int tableModelLocal = (int)table.GetProgramVariable("tableModelLocal");
+        if (tableModel == tableModelLocal)
+        {
+            if (0 < tableParamPollingInterval)
+            {
+                SendCustomEventDelayedSeconds(nameof(TableParamUpdate), tableParamPollingInterval);
+            }
+            return;
+        }
+
+#if TKCH_DEBUG_IMAGE_BALLS
+        table._Log($"TKCH  tableModel changed {tableModel} -> {tableModelLocal}");
+#endif
+        tableModel = tableModelLocal;
+        for (int i = 0; i < imageBalls.Length; i++)
+        {
+            hideGuideline(i);
+        }
+        
         UdonSharpBehaviour physicsManager = table.currentPhysicsManager;
         Vector3 k_pR = (Vector3)physicsManager.GetProgramVariable("k_pR");
         Vector3 k_pO = (Vector3)physicsManager.GetProgramVariable("k_pO");
@@ -423,11 +452,11 @@ public class ImageBallManager : UdonSharpBehaviour
                 }
 #endif
                 guideMaterialDimsVector = new Vector4(k_pR.x - k_BALL_RADIUS, k_pO.z - k_BALL_RADIUS, 0, 0);
-                
+
                 for (int i = 0; i < imageBallInMirror.Length; i++)
                 {
-                    followGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetVector("_Dims", guideMaterialDimsVector);
-                    targetGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetVector("_Dims", guideMaterialDimsVector);
+                    followGuideDisplayMaterialInMirror[i].SetVector("_Dims", guideMaterialDimsVector);
+                    targetGuideDisplayMaterialInMirror[i].SetVector("_Dims", guideMaterialDimsVector);
                 }
             }
         }
@@ -687,6 +716,22 @@ public class ImageBallManager : UdonSharpBehaviour
         this.RequestSerialization();
     }
 
+
+    public void hideGuideline(int idx)
+    {
+        targetGuideline[idx].SetActive(false);
+        followGuideline[idx].SetActive(false);
+
+        if (!ReferenceEquals(null, imageBallInMirrorParent))
+        {
+            for (int i = 0; i < imageBallInMirror.Length; i++)
+            {
+                targetGuidelineInMirror[i].SetActive(false);
+                followGuidelineInMirror[i].SetActive(false);
+            }
+        }
+    }
+
     public void syncValueUpdate()
     {
         for (int i = 0; i < imageBalls.Length; i++)
@@ -724,14 +769,18 @@ public class ImageBallManager : UdonSharpBehaviour
         initializeMirrorTableCenterPositions();
 
         //ballsPSyncedInMirror = new Vector3[imageBallInMirror.Length];
+        followGuideDisplayMaterialInMirror = new Material[imageBallInMirror.Length];
+        targetGuideDisplayMaterialInMirror = new Material[imageBallInMirror.Length];
         
         for (int i = 0; i < imageBallInMirror.Length; i++)
         {
             imageBallInMirror[i] = imageBallInMirrorParent.transform.Find($"ImageBall_{i}").gameObject;
             followGuidelineInMirror[i] = imageBallInMirror[i].transform.Find("follow_guide").gameObject;
             targetGuidelineInMirror[i] = imageBallInMirror[i].transform.Find("target_guide").gameObject;
-            followGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
-            targetGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material.SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            followGuideDisplayMaterialInMirror[i] = followGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material;
+            targetGuideDisplayMaterialInMirror[i] = targetGuidelineInMirror[i].transform.Find("guide_display").GetComponent<MeshRenderer>().material;
+            followGuideDisplayMaterialInMirror[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
+            targetGuideDisplayMaterialInMirror[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
             targetBallInMirror[i] = imageBallInMirrorParent.transform.Find($"Cylinder_{i}").gameObject; // ないのでとりあえず
         }
 
@@ -775,7 +824,8 @@ public class ImageBallManager : UdonSharpBehaviour
             return;
         }
 
-        inMirrorPositionUpdate(imageBalls[0].transform.localPosition, imageBallInMirrorMatrix);
+        Vector3 relativePosition = table.transform.InverseTransformPoint(imageBalls[0].transform.position);
+        inMirrorPositionUpdate(relativePosition, imageBallInMirrorMatrix);
         inMirrorPositionUpdateGuidelines(imageBallInMirror, followGuideline[0], followGuidelineInMirror, followGuidelineInMirrorMatrix);
         //inMirrorUpdateGuidelines(imageBalls[0].transform.localPosition, followGuideline[0], followGuidelineInMirror, followGuidelineInMirrorMatrix);
         bool targetEnable = 0 <= targetIndex[0];
@@ -863,7 +913,8 @@ public class ImageBallManager : UdonSharpBehaviour
         //Vector3 position = guideline.transform.localPosition;
         Vector3 scale = guideline.transform.localScale;
         //scale.x *= 3;
-        Vector3 angle = guideline.transform.localEulerAngles;
+        Quaternion rotation = guideline.transform.rotation * Quaternion.Inverse(table.transform.rotation);
+        Vector3 angle = rotation.eulerAngles;
         for (int i = 0; i < guidelineInMirror.Length; i++)
         {
             guidelineInMirror[i].SetActive(active);
@@ -893,7 +944,7 @@ public class ImageBallManager : UdonSharpBehaviour
                 int z2 = z % 2;
                 guidelineInMirrorMatrix[x][z].transform.localEulerAngles = new Vector3(
                     0,
-                    (angle.y + mirrordAngleAdjusts[x2][z2]) * mirrordAngleFlips[x2][z2],
+                    (angle.y - table.transform.localEulerAngles.y + mirrordAngleAdjusts[x2][z2]) * mirrordAngleFlips[x2][z2],
                     0
                 );
             }

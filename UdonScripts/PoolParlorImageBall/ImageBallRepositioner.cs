@@ -1,4 +1,6 @@
-﻿using System;
+﻿// #define TKCH_DEBUG_IMAGE_BALLS
+
+using System;
 using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
@@ -18,6 +20,24 @@ public class ImageBallRepositioner : UdonSharpBehaviour
         idx = idx_;
         
         pickup = (VRC_Pickup)GetComponent(typeof(VRC_Pickup));
+    }
+
+    private void OnDisable()
+    {
+#if TKCH_DEBUG_IMAGE_BALLS
+        if (ReferenceEquals(null, table))
+        {
+            Debug.Log("TKCH ImageBallRepositioner::OnDisable()");
+        }
+        else
+        {
+            table._Log("TKCH ImageBallRepositioner::OnDisable()");
+        }
+#endif
+        if (!ReferenceEquals(null, manager))
+        {
+            manager.hideGuideline(idx);
+        }
     }
 
     public override void OnPickup()
