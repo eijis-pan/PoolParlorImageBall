@@ -1,6 +1,6 @@
-//#define TKCH_DEBUG_IMAGE_BALLS
-#define TKCH_DEBUG_BANK_ANGLE
-//#define TKCH_DEBUG_BALL_SHADOW
+// #define TKCH_DEBUG_IMAGE_BALLS
+// #define TKCH_DEBUG_BANK_ANGLE
+// #define TKCH_DEBUG_BALL_SHADOW
 
 using System;
 using UdonSharp;
