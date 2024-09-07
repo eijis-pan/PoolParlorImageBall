@@ -1,4 +1,5 @@
 //#define TKCH_DEBUG_IMAGE_BALLS
+#define TKCH_DEBUG_BANK_ANGLE
 
 using System;
 using UdonSharp;
@@ -88,6 +89,9 @@ public class ImageBallManager : UdonSharpBehaviour
         new Vector3[TABLE_MIRROR_UNIT],
         new Vector3[TABLE_MIRROR_UNIT]
     };
+#if TKCH_DEBUG_BANK_ANGLE
+    private GameObject[] debugCubes = new GameObject[TABLE_MIRROR_UNIT * TABLE_MIRROR_UNIT];
+#endif
     float[][] mirrordPatternsX =
     {
         new float[2],
@@ -229,7 +233,7 @@ public class ImageBallManager : UdonSharpBehaviour
 #if TKCH_DEBUG_IMAGE_BALLS
         table._Log("TKCH ImageBallManager::OnEnable()");
 #endif
-#if TKCH_DEBUG_IMAGE_BALLS
+#if TKCH_DEBUG_IMAGE_BALLS || TKCH_DEBUG_BANK_ANGLE
         table._Log($"  table.transform.eulerAngles.y = {table.transform.eulerAngles.y}");
         table._Log($"  table.transform.localEulerAngles.y = {table.transform.localEulerAngles.y}");
 #endif
@@ -278,6 +282,11 @@ public class ImageBallManager : UdonSharpBehaviour
                 table.transform.eulerAngles.y,
                 rotation.eulerAngles.z
             );
+#if TKCH_DEBUG_BANK_ANGLE
+            table._Log($"  imageBallInMirrorParent.transform.eulerAngles.y = {imageBallInMirrorParent.transform.eulerAngles.y}");
+            table._Log($"  imageBallInMirrorParent.transform.localEulerAngles.y = {imageBallInMirrorParent.transform.localEulerAngles.y}");
+            Debug.Log($"EIJIS_IMAGEBALL_DEBUG_BANK_ANGLE table.transform.eulerAngles.y = {table.transform.eulerAngles.y}, table.transform.localEulerAngles.y = {table.transform.localEulerAngles.y}, imageBallInMirrorParent.transform.eulerAngles.y = {imageBallInMirrorParent.transform.eulerAngles.y}, imageBallInMirrorParent.transform.localEulerAngles.y = {imageBallInMirrorParent.transform.localEulerAngles.y}");
+#endif
 
             initializeMirrorTable();
             for (int i = 0; i < imageBallInMirror.Length; i++)
@@ -444,14 +453,18 @@ public class ImageBallManager : UdonSharpBehaviour
 #endif
                 initializeMirrorTableCenterPositions();
                 
-#if TKCH_DEBUG_IMAGE_BALLS
+#if TKCH_DEBUG_IMAGE_BALLS || TKCH_DEBUG_BANK_ANGLE
                 for (int i = 0; i < imageBallInMirror.Length; i++)
                 {
                     imageBallInMirror[i].transform.localScale = newBallSize;
                     targetBallInMirror[i].transform.localScale = newBallSize;
                 }
 #endif
+#if TKCH_DEBUG_BANK_ANGLE
+                guideMaterialDimsVector = new Vector4(10.0f, 10.0f, 0, 0);
+#else
                 guideMaterialDimsVector = new Vector4(k_pR.x - k_BALL_RADIUS, k_pO.z - k_BALL_RADIUS, 0, 0);
+#endif
 
                 for (int i = 0; i < imageBallInMirror.Length; i++)
                 {
@@ -486,6 +499,15 @@ public class ImageBallManager : UdonSharpBehaviour
         {
             guideScaleBase = 0.12f; // carom 0.2f bank 0.12f, normal 0.04f
         }
+
+        // for (int i = 0; i < imageBalls.Length; i++)
+        // {
+        //     MeshRenderer meshRenderer = imageBalls[i].GetComponent<MeshRenderer>();
+        //     MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
+        //     // materialPropertyBlock.SetFloat(_Floor, transformSurface.position.y - k_BALL_RADIUS);
+        //     materialPropertyBlock.SetFloat("_Floor", transformSurface.position.y);// - k_BALL_RADIUS);
+        //     meshRenderer.SetPropertyBlock(materialPropertyBlock);
+        // }
 
         if (0 < tableParamPollingInterval)
         {
@@ -766,12 +788,28 @@ public class ImageBallManager : UdonSharpBehaviour
 
     private void initializeMirrorTable()
     {
+#if TKCH_DEBUG_BANK_ANGLE
+        Material m1 = imageBalls[0].GetComponent<MeshRenderer>().material;
+        Material m2 = imageBallInMirrorParent.transform.Find("Cylinder_0").GetComponent<MeshRenderer>().material;
+        for (int i = 0; i < imageBallInMirror.Length; i++)
+        {
+            // debugCubes[i] = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            debugCubes[i] = Instantiate(table.tableModels[0].gameObject.transform.Find("table_artwork").Find("table").gameObject);
+            debugCubes[i].transform.parent = imageBallInMirrorParent.transform;
+            debugCubes[i].transform.GetComponent<MeshRenderer>().material = (i % 2 == 0 ? m1 : m2);
+        }
+#endif
+
         initializeMirrorTableCenterPositions();
 
         //ballsPSyncedInMirror = new Vector3[imageBallInMirror.Length];
         followGuideDisplayMaterialInMirror = new Material[imageBallInMirror.Length];
         targetGuideDisplayMaterialInMirror = new Material[imageBallInMirror.Length];
         
+#if TKCH_DEBUG_BANK_ANGLE
+        m2 = imageBalls[0].GetComponent<MeshRenderer>().materials[1];
+#endif
+
         for (int i = 0; i < imageBallInMirror.Length; i++)
         {
             imageBallInMirror[i] = imageBallInMirrorParent.transform.Find($"ImageBall_{i}").gameObject;
@@ -782,6 +820,14 @@ public class ImageBallManager : UdonSharpBehaviour
             followGuideDisplayMaterialInMirror[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
             targetGuideDisplayMaterialInMirror[i].SetMatrix("_BaseTransform", table.transform.worldToLocalMatrix);
             targetBallInMirror[i] = imageBallInMirrorParent.transform.Find($"Cylinder_{i}").gameObject; // ないのでとりあえず
+#if TKCH_DEBUG_BANK_ANGLE
+            imageBallInMirror[i].SetActive(true);
+            MeshRenderer mr = imageBallInMirror[i].GetComponent<MeshRenderer>();
+            Material[] ms = new[] {m1, m2};
+            mr.materials = ms;
+            mr.enabled = true;
+            targetBallInMirror[i].SetActive(true);
+#endif
         }
 
         for (int x = 0; x < imageBallInMirrorMatrix.Length; x++)
@@ -810,6 +856,24 @@ public class ImageBallManager : UdonSharpBehaviour
                     0,
                     (TABLE_SHORT_OFFSET - k_BALL_RADIUS) * oz
                 );
+#if TKCH_DEBUG_BANK_ANGLE
+                if (ox == 0 && oz == 0)
+                {
+                    debugCubes[(x * TABLE_MIRROR_UNIT) + z].transform.localPosition = new Vector3(
+                        0,
+                        - (imageBallInMirrorParent.transform.position.y * 2),
+                        0
+                    );
+                }
+                else
+                {
+                    debugCubes[(x * TABLE_MIRROR_UNIT) + z].transform.localPosition = new Vector3(
+                        (TABLE_LONG_OFFSET - k_BALL_RADIUS) * ox,
+                        - (imageBallInMirrorParent.transform.position.y / 8),
+                        (TABLE_SHORT_OFFSET - k_BALL_RADIUS) * oz
+                    );
+                }
+#endif
             }
         }
     }
