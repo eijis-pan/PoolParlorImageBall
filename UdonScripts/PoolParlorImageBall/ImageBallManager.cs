@@ -1,5 +1,6 @@
 //#define TKCH_DEBUG_IMAGE_BALLS
 #define TKCH_DEBUG_BANK_ANGLE
+//#define TKCH_DEBUG_BALL_SHADOW
 
 using System;
 using UdonSharp;
@@ -234,6 +235,8 @@ public class ImageBallManager : UdonSharpBehaviour
         table._Log("TKCH ImageBallManager::OnEnable()");
 #endif
 #if TKCH_DEBUG_IMAGE_BALLS || TKCH_DEBUG_BANK_ANGLE
+        table._Log($"  table.transform.position = {table.transform.position}");
+        table._Log($"  table.transform.localPosition = {table.transform.localPosition}");
         table._Log($"  table.transform.eulerAngles.y = {table.transform.eulerAngles.y}");
         table._Log($"  table.transform.localEulerAngles.y = {table.transform.localEulerAngles.y}");
 #endif
@@ -282,7 +285,12 @@ public class ImageBallManager : UdonSharpBehaviour
                 table.transform.eulerAngles.y,
                 rotation.eulerAngles.z
             );
+            Vector3 position = table.transform.position;
+            Vector3 position2 = imageBallInMirrorParent.transform.position;
+            imageBallInMirrorParent.transform.position = new Vector3(position.x, position2.y, position.z);
 #if TKCH_DEBUG_BANK_ANGLE
+            table._Log($"  imageBallInMirrorParent.transform.position = {imageBallInMirrorParent.transform.position}");
+            table._Log($"  imageBallInMirrorParent.transform.localPosition = {imageBallInMirrorParent.transform.localPosition}");
             table._Log($"  imageBallInMirrorParent.transform.eulerAngles.y = {imageBallInMirrorParent.transform.eulerAngles.y}");
             table._Log($"  imageBallInMirrorParent.transform.localEulerAngles.y = {imageBallInMirrorParent.transform.localEulerAngles.y}");
             Debug.Log($"EIJIS_IMAGEBALL_DEBUG_BANK_ANGLE table.transform.eulerAngles.y = {table.transform.eulerAngles.y}, table.transform.localEulerAngles.y = {table.transform.localEulerAngles.y}, imageBallInMirrorParent.transform.eulerAngles.y = {imageBallInMirrorParent.transform.eulerAngles.y}, imageBallInMirrorParent.transform.localEulerAngles.y = {imageBallInMirrorParent.transform.localEulerAngles.y}");
@@ -320,17 +328,6 @@ public class ImageBallManager : UdonSharpBehaviour
     public void _DelayInit()
     {
         TableParamUpdate();
-#if TKCH_DEBUG_IMAGE_BALLS
-        table._Log($"  transformSurface.position.y = {transformSurface.position.y}");
-#endif
-        for (int i = 0; i < imageBalls.Length; i++)
-        {
-            MeshRenderer meshRenderer = imageBalls[i].GetComponent<MeshRenderer>();
-            MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
-            // materialPropertyBlock.SetFloat(_Floor, transformSurface.position.y - k_BALL_RADIUS);
-            materialPropertyBlock.SetFloat("_Floor", transformSurface.position.y - k_BALL_RADIUS);
-            meshRenderer.SetPropertyBlock(materialPropertyBlock);
-        }
     }
 
 #if TKCH_DEBUG_IMAGE_BALLS
@@ -500,14 +497,19 @@ public class ImageBallManager : UdonSharpBehaviour
             guideScaleBase = 0.12f; // carom 0.2f bank 0.12f, normal 0.04f
         }
 
-        // for (int i = 0; i < imageBalls.Length; i++)
-        // {
-        //     MeshRenderer meshRenderer = imageBalls[i].GetComponent<MeshRenderer>();
-        //     MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
-        //     // materialPropertyBlock.SetFloat(_Floor, transformSurface.position.y - k_BALL_RADIUS);
-        //     materialPropertyBlock.SetFloat("_Floor", transformSurface.position.y);// - k_BALL_RADIUS);
-        //     meshRenderer.SetPropertyBlock(materialPropertyBlock);
-        // }
+        float floor = transformSurface.position.y - k_BALL_RADIUS + 0.001f;
+#if TKCH_DEBUG_BALL_SHADOW
+        table._Log($"  transformSurface.position.y = {transformSurface.position.y}, k_BALL_RADIUS = {k_BALL_RADIUS}");
+        table._Log($"  floor = {floor}");
+#endif
+        for (int i = 0; i < imageBalls.Length; i++)
+        {
+            MeshRenderer meshRenderer = imageBalls[i].GetComponent<MeshRenderer>();
+            MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
+            // materialPropertyBlock.SetFloat(_Floor, floor);
+            materialPropertyBlock.SetFloat("_Floor", floor);
+            meshRenderer.SetPropertyBlock(materialPropertyBlock);
+        }
 
         if (0 < tableParamPollingInterval)
         {
@@ -844,6 +846,9 @@ public class ImageBallManager : UdonSharpBehaviour
     
     private void initializeMirrorTableCenterPositions()
     {
+#if TKCH_DEBUG_BANK_ANGLE
+        Quaternion rotation = imageBallInMirrorParent.transform.rotation;
+#endif
         int negativeAdjustOffset = (TABLE_MIRROR_UNIT / 2); // 5 -> -2 center set to 0,0
         for (int x = 0; x < mirrorTableCenterPositions.Length; x++)
         {
@@ -873,6 +878,11 @@ public class ImageBallManager : UdonSharpBehaviour
                         (TABLE_SHORT_OFFSET - k_BALL_RADIUS) * oz
                     );
                 }
+                debugCubes[(x * TABLE_MIRROR_UNIT) + z].transform.eulerAngles = new Vector3(
+                    rotation.eulerAngles.x,
+                    table.transform.eulerAngles.y,
+                    rotation.eulerAngles.z
+                );
 #endif
             }
         }
